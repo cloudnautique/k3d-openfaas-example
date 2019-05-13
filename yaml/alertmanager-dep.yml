@@ -1,0 +1,77 @@
+---
+---
+apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: openfaas
+    component: alertmanager
+  name: alertmanager
+  namespace: "openfaas"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+      annotations:
+        sidecar.istio.io/inject: "false"
+        checksum/alertmanager-config: "88b3a8dc6475fea9507a7b2ce9e62d62ebf711ab6b1860d9e4f8064eed5d7357"
+    spec:
+      containers:
+      - name: alertmanager
+        resources:
+          requests:
+            memory: "32Mi"
+        image: prom/alertmanager:v0.16.1
+        imagePullPolicy: Always
+        command:
+          - "alertmanager"
+          - "--config.file=/alertmanager.yml"
+          - "--storage.path=/alertmanager"
+        livenessProbe:
+          exec:
+            command:
+            - wget
+            - --quiet
+            - --tries=1
+            - --timeout=30
+            - --spider
+            - http://localhost:9093/-/ready
+          timeoutSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - wget
+            - --quiet
+            - --tries=1
+            - --timeout=30
+            - --spider
+            - http://localhost:9093/-/ready
+          timeoutSeconds: 30
+        ports:
+        - containerPort: 9093
+          protocol: TCP
+        resources:
+          requests:
+            memory: 25Mi
+          limits:
+            memory: 50Mi
+        volumeMounts:
+        - mountPath: /alertmanager.yml
+          name: alertmanager-config
+          subPath: alertmanager.yml
+        - name: auth
+          readOnly: true
+          mountPath: "/var/secrets"
+      volumes:
+        - name: alertmanager-config
+          configMap:
+            name: alertmanager-config
+            items:
+              - key: alertmanager.yml
+                path: alertmanager.yml
+                mode: 0644
+        - name: auth
+          secret:
+            secretName: basic-auth
